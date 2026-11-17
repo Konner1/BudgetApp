@@ -1,0 +1,32 @@
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Real financial data: never commit. Only synthetic files in samples/ are allowed.
+data/
+*.csv
+*.qfx
+*.ofx
+!samples/*.csv
+
+# Database dumps and backups
+*.sql.gz
+*.dump
+backups/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Node
+node_modules/
+dist/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
