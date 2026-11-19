@@ -36,51 +36,40 @@ When I correct a category, that becomes a new rule and a new data point, so the 
 ![BudgetApp ERD](erd.png)
 
 **Reading the ERD**
-- **Users and households:** a user joins a household through `household_members`. Everything else belongs to a household, so my wife and I share one budget while other users get their own.
-- **Accounts and imports:** a household's `accounts` (Wells Fargo, Chase, Capital One) receive `import_batches`, and each batch creates `transactions`. A unique `dedupe_hash` (account, date, amount, description) means importing the same file twice adds nothing.
-- **Merchants:** one row per cleaned-up merchant name per household. It holds the embedding vector and the household's chosen category for that merchant, so a merchant is categorized once and every transaction from it follows. It is unique on `household_id` + `name_norm`.
-- **Categories and rules:** each household has its own `categories` and `category_rules`.
-- **Budgets and reports:** `budgets` stores an amount per category per month. `monthly_reports` stores the computed monthly summary.
-- **Tracking the AI:** each transaction records `category_source` (rule, embedding, llm or manual) and `category_confidence`, so low-confidence items can go to a "needs review" list.
-- **Separation between households:** all households share the same tables, and every table carries its own `household_id`. **Postgres row-level security** restricts every session to its own household. Embedding search is filtered by household, so one household's merchants are never compared against another's.
+- **households:** the group that shares a budget (me and my wife). Everything below belongs to a household.
+- **users:** people who log in. Each user belongs to one household.
+- **accounts:** the bank account and credit cards (Wells Fargo, Chase, Capital One).
+- **transactions:** one row per purchase or deposit. This is the main table, and each one belongs to an account and has a category.
+- **categories:** Gas, Groceries, Restaurants and so on. Each household has its own.
+- **budgets:** the amount we plan to spend on a category in a given month.
+
+The monthly report isn't a table. It's calculated by adding up each category's transactions for the month and comparing the total to its budget.
+
+**Separation between households:** every household has its own users, accounts and categories, and Postgres row-level security keeps each household's rows private.
+
+**Later additions:** a `merchants` table to hold the embeddings for categorizing, a table of import batches, and a table of saved rules.
 
 <details>
 <summary>ERD source (Mermaid)</summary>
 
 ```mermaid
 erDiagram
-    households ||--o{ household_members : has
-    users ||--o{ household_members : joins
+    households ||--o{ users : has
     households ||--o{ accounts : owns
     households ||--o{ categories : defines
-    households ||--o{ category_rules : defines
-    households ||--o{ budgets : sets
-    accounts ||--o{ import_batches : receives
     accounts ||--o{ transactions : contains
-    import_batches ||--o{ transactions : created
-    households ||--o{ merchants : knows
-    households ||--o{ import_batches : runs
-    households ||--o{ transactions : tracks
-    merchants ||--o{ transactions : appears_in
-    categories ||--o{ merchants : default_for
     categories ||--o{ transactions : classifies
     categories ||--o{ budgets : limits
-    categories ||--o{ category_rules : targets
-    households ||--o{ monthly_reports : receives
 
-    users {
-        uuid id PK
-        text email
-        text password_hash
-    }
     households {
         uuid id PK
         text name
     }
-    household_members {
+    users {
+        uuid id PK
         uuid household_id FK
-        uuid user_id FK
-        text role
+        text email
+        text password_hash
     }
     accounts {
         uuid id PK
@@ -88,55 +77,24 @@ erDiagram
         text institution
         text type
     }
-    import_batches {
-        uuid id PK
-        uuid household_id FK
-        uuid account_id FK
-        timestamptz imported_at
-    }
-    transactions {
-        uuid id PK
-        uuid household_id FK
-        uuid account_id FK
-        uuid import_batch_id FK
-        uuid merchant_id FK
-        uuid category_id FK
-        date posted_on
-        numeric amount
-        text raw_description
-        text category_source
-        real category_confidence
-        text dedupe_hash
-    }
-    merchants {
-        uuid id PK
-        uuid household_id FK
-        uuid category_id FK
-        text name_norm
-        vector embedding
-    }
     categories {
         uuid id PK
         uuid household_id FK
         text name
     }
-    category_rules {
+    transactions {
         uuid id PK
-        uuid household_id FK
+        uuid account_id FK
         uuid category_id FK
-        text pattern
+        date posted_on
+        numeric amount
+        text description
     }
     budgets {
-        uuid household_id FK
+        uuid id PK
         uuid category_id FK
         date month
         numeric amount
-    }
-    monthly_reports {
-        uuid id PK
-        uuid household_id FK
-        date month
-        jsonb summary
     }
 ```
 
